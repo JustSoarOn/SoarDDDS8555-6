@@ -1,0 +1,2063 @@
+---
+title: "Assignment 6: Build and Evaluate Tree Models"
+subtitle: "SoarDDDS8555-6 - Interpretaions and Report of the Python Analysis"
+author: "Soar, Donald"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    number_sections: true
+fontsize: 11pt
+geometry: margin=1in
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+PROJECT_ROOT <- normalizePath(
+  getwd(),
+  winslash = "/",
+  mustWork = TRUE
+)
+
+RESULT_DIR <- file.path(
+  PROJECT_ROOT,
+  "output",
+  "results"
+)
+
+FIG_DIR <- file.path(
+  PROJECT_ROOT,
+  "output",
+  "figures"
+)
+
+BART_DIR <- file.path(
+  PROJECT_ROOT,
+  "output",
+  "bart"
+)
+
+SUBMISSIONS_DIR <- file.path(
+  PROJECT_ROOT,
+  "output",
+  "submissions"
+)
+
+read_result <- function(filename) {
+
+  path <- file.path(
+    RESULT_DIR,
+    filename
+  )
+
+  if (!file.exists(path)) {
+    return(NULL)
+  }
+
+  tryCatch(
+    read.csv(
+      path,
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    ),
+    error = function(e) NULL
+  )
+}
+
+
+artifact_exists <- function(filename) {
+
+  file.exists(
+    file.path(
+      RESULT_DIR,
+      filename
+    )
+  )
+
+}
+
+
+show_table <- function(
+  data,
+  caption = NULL,
+  digits = 4
+) {
+
+  if (!is.null(data) && nrow(data) > 0) {
+
+    numeric_columns <- names(data)[
+      vapply(
+        data,
+        is.numeric,
+        logical(1)
+      )
+    ]
+
+    if (length(numeric_columns) > 0) {
+
+      data[numeric_columns] <- lapply(
+        data[numeric_columns],
+        function(x) round(x, digits)
+      )
+
+    }
+
+    knitr::kable(
+      data,
+      caption = caption
+    )
+
+  } else {
+
+    cat(
+      "The requested result artifact is not currently available."
+    )
+
+  }
+
+}
+
+
+show_figure <- function(
+  path,
+  message = "The requested figure is not currently available."
+) {
+
+  if (file.exists(path)) {
+
+    knitr::include_graphics(path)
+
+  } else {
+
+    cat(message)
+
+  }
+
+}
+
+
+# ------------------------------------------------------------
+# Data-inspection artifacts
+# ------------------------------------------------------------
+
+data_dimensions <- read_result(
+  "data_dimensions.csv"
+)
+
+data_types <- read_result(
+  "data_types.csv"
+)
+
+missing_values <- read_result(
+  "missing_values.csv"
+)
+
+duplicate_summary <- read_result(
+  "duplicate_summary.csv"
+)
+
+target_distribution <- read_result(
+  "target_distribution.csv"
+)
+
+numeric_summary <- read_result(
+  "numeric_summary.csv"
+)
+
+categorical_summary <- read_result(
+  "categorical_summary.csv"
+)
+
+numeric_correlation <- read_result(
+  "numeric_correlation_matrix.csv"
+)
+
+numeric_summary_by_target <- read_result(
+  "numeric_summary_by_target.csv"
+)
+
+first_five_training_observations <- read_result(
+  "first_five_training_observations.csv"
+)
+
+
+# ------------------------------------------------------------
+# Conventional model artifacts
+# ------------------------------------------------------------
+
+decision_tree_metrics <- read_result(
+  "decision_tree_metrics.csv"
+)
+
+decision_tree_classification_report <- read_result(
+  "decision_tree_classification_report.csv"
+)
+
+decision_tree_confusion_matrix <- read_result(
+  "decision_tree_confusion_matrix.csv"
+)
+
+decision_tree_configuration <- read_result(
+  "decision_tree_configuration.csv"
+)
+
+bagging_metrics <- read_result(
+  "bagging_metrics.csv"
+)
+
+bagging_classification_report <- read_result(
+  "bagging_classification_report.csv"
+)
+
+bagging_confusion_matrix <- read_result(
+  "bagging_confusion_matrix.csv"
+)
+
+random_forest_metrics <- read_result(
+  "random_forest_metrics.csv"
+)
+
+random_forest_classification_report <- read_result(
+  "random_forest_classification_report.csv"
+)
+
+random_forest_confusion_matrix <- read_result(
+  "random_forest_confusion_matrix.csv"
+)
+
+random_forest_feature_importance <- read_result(
+  "random_forest_feature_importance.csv"
+)
+
+boosting_metrics <- read_result(
+  "boosting_metrics.csv"
+)
+
+boosting_classification_report <- read_result(
+  "boosting_classification_report.csv"
+)
+
+boosting_confusion_matrix <- read_result(
+  "boosting_confusion_matrix.csv"
+)
+
+logistic_regression_metrics <- read_result(
+  "logistic_regression_metrics.csv"
+)
+
+logistic_regression_classification_report <- read_result(
+  "logistic_regression_classification_report.csv"
+)
+
+logistic_regression_confusion_matrix <- read_result(
+  "logistic_regression_confusion_matrix.csv"
+)
+
+logistic_regression_coefficients <- read_result(
+  "logistic_regression_coefficients.csv"
+)
+
+
+# ------------------------------------------------------------
+# BART evaluation artifacts
+# ------------------------------------------------------------
+
+bart_required_files <- c(
+  "bart_metrics.csv",
+  "bart_classification_report.csv",
+  "bart_confusion_matrix.csv",
+  "bart_model_summary.csv",
+  "bart_test_probabilities.csv",
+  "bart_feature_metadata.csv",
+  "bart_comparison.csv"
+)
+
+bart_files_exist <- all(
+  vapply(
+    bart_required_files,
+    artifact_exists,
+    logical(1)
+  )
+)
+
+bart_completion_marker <- artifact_exists(
+  "bart_completed.txt"
+)
+
+bart_available <- (
+  bart_files_exist &&
+  bart_completion_marker
+)
+
+bart_metrics <- NULL
+bart_classification_report <- NULL
+bart_confusion_matrix <- NULL
+bart_model_summary <- NULL
+bart_test_probabilities <- NULL
+bart_feature_metadata <- NULL
+bart_comparison <- NULL
+
+if (bart_available) {
+
+  bart_metrics <- read_result(
+    "bart_metrics.csv"
+  )
+
+  bart_classification_report <- read_result(
+    "bart_classification_report.csv"
+  )
+
+  bart_confusion_matrix <- read_result(
+    "bart_confusion_matrix.csv"
+  )
+
+  bart_model_summary <- read_result(
+    "bart_model_summary.csv"
+  )
+
+  bart_test_probabilities <- read_result(
+    "bart_test_probabilities.csv"
+  )
+
+  bart_feature_metadata <- read_result(
+    "bart_feature_metadata.csv"
+  )
+
+  bart_comparison <- read_result(
+    "bart_comparison.csv"
+  )
+
+}
+
+
+# ------------------------------------------------------------
+# Combined conventional model results
+# ------------------------------------------------------------
+
+model_results_list <- list(
+  "Decision Tree"       = decision_tree_metrics,
+  "Bagging"             = bagging_metrics,
+  "Random Forest"       = random_forest_metrics,
+  "Boosting"            = boosting_metrics,
+  "Logistic Regression" = logistic_regression_metrics
+)
+
+if (
+  bart_available &&
+  !is.null(bart_metrics)
+) {
+
+  model_results_list[["BART"]] <- bart_metrics
+
+}
+
+model_results_list <- model_results_list[
+  !vapply(
+    model_results_list,
+    is.null,
+    logical(1)
+  )
+]
+
+if (length(model_results_list) > 0) {
+
+  all_metric_columns <- unique(
+    unlist(
+      lapply(
+        model_results_list,
+        names
+      )
+    )
+  )
+
+  model_results_list <- lapply(
+    model_results_list,
+    function(x) {
+
+      missing_columns <- setdiff(
+        all_metric_columns,
+        names(x)
+      )
+
+      if (length(missing_columns) > 0) {
+
+        for (column in missing_columns) {
+          x[[column]] <- NA
+        }
+
+      }
+
+      x[
+        ,
+        all_metric_columns,
+        drop = FALSE
+      ]
+
+    }
+  )
+
+  model_results <- do.call(
+    rbind,
+    model_results_list
+  )
+
+  rownames(model_results) <- NULL
+
+} else {
+
+  model_results <- NULL
+
+}
+
+
+# ------------------------------------------------------------
+# Figures
+# ------------------------------------------------------------
+
+target_plot <- file.path(
+  FIG_DIR,
+  "target_distribution.png"
+)
+
+weight_plot <- file.path(
+  FIG_DIR,
+  "weight_by_target.png"
+)
+
+age_plot <- file.path(
+  FIG_DIR,
+  "age_by_target.png"
+)
+
+height_plot <- file.path(
+  FIG_DIR,
+  "height_by_target.png"
+)
+
+correlation_plot <- file.path(
+  FIG_DIR,
+  "numeric_correlation_heatmap.png"
+)
+
+decision_tree_plot <- file.path(
+  FIG_DIR,
+  "decision_tree.png"
+)
+
+
+```
+
+
+# Introduction
+
+This report presents the analysis for Assignment 6, Build and Evaluate Tree Models. The assignment has three principal components: (1) completing Conceptual Question #1 from Chapter 8 of *An Introduction to Statistical Learning with Applications* in Python (ISLR Python), (2) completing **Applied Question #12**, and (3) developing and submitting four tree-based classification models to the Kaggle Multi-class *Prediction of Obesity Risk* competition.
+
+Applied Question #12 asks the analyst to apply **boosting, bagging, random forests, and BART** to a dataset, fit the models using training data, evaluate them on held-out data, and compare their performance with simpler methods such as linear or logistic regression. This report addresses that question using the obesity-risk dataset and supplements the required four approaches with a single Decision Tree and an L2-regularized multinomial Logistic Regression baseline.
+
+The response variable, **NObeyesdad**, contains seven obesity-status categories. The predictors represent demographic, physical, dietary, behavioral, and lifestyle characteristics.
+
+The analysis therefore evaluates:
+
+    • Decision Tree
+
+    • Bagging
+
+    • Random Forest
+
+    • Boosting
+
+    • L2-regularized multinomial Logistic Regression
+
+    • Bayesian Additive Regression Trees (BART)
+
+Performance is evaluated primarily using **Accuracy, Macro F1, and Weighted F1**. Macro F1 is especially useful because the seven target classes are not perfectly balanced and therefore gives each class equal weight in the evaluation.
+
+The computational analysis was performed in Python, with durable result tables and figures saved under the project **output** directories. This R Markdown report reads those artifacts for presentation and interpretation rather than unnecessarily rerunning the computationally intensive models.
+
+# Executive Summary
+
+The labeled training dataset contains **20,758 observations and 18 variables**, while the Kaggle test dataset contains **13,840 observations and 17 variables**. The additional training variable is the response, **NObeyesdad**.
+
+The initial data inspection found:
+
+    • No missing values in the training data.
+
+    • No duplicate training rows.
+
+    • Seven target classes.
+
+    • A mixture of numerical and categorical predictors.
+
+The four required tree-based methods substantially improved upon the single Decision Tree in the reported validation analysis. The completed conventional-model results were:
+
+|**Model**	               | **Accuracy**	 | **Macro F1**	 |  **Weighted F1** |
+|:---                      |---:           |---:           |---:              |
+|
+|  Decision Tree	         |   0.8396	     |      0.8252	 |        0.8400    |
+|
+|  L2 Logistic Regression	 |   0.8704	     |      0.8568	 |         0.8695   |
+|
+|  Bagging	               |   0.8926	     |       0.8809	 |         0.8923   |
+|
+|  Random Forest	         |   0.8964	     |       0.8850	 |         0.8959   |
+|
+|  Boosting	               |   0.9068	     |       0.8965	 |         0.9063   |
+______________________________________________________________________________
+
+These results show that the ensemble tree methods produced higher observed validation metrics than the individual Decision Tree and the Logistic Regression baseline in the completed analysis.
+
+The class-level results show that performance was not uniform across the seven categories. **Obesity_Type_III** was classified with an F1 score close to 1.00 across the tree-based models, whereas **Overweight_Level_I** and **Overweight_Level_II** were more difficult to distinguish. This demonstrates why Accuracy should be interpreted together with Macro F1 and class-level results.
+
+The tree-based feature-importance analyses consistently identified Weight as an important predictor. Other frequently important variables included Age, Height, FCVC, CH2O, Gender, TUE, FAF, and NCP. These results describe predictive relationships within the fitted models and should not be interpreted as evidence of causation.
+
+The Kaggle submissions were also completed. The recorded leaderboard results were:
+
+
+|**Submission**	                 | **Private Score**	 | **Public Score**	 |  
+|:---                            |---:                 |---:               |
+|
+|  submission_bart.csv	         |   0.73256	         |      0.73338	     |  
+|
+|  random_forest_submission.csv	 |   0.89216	         |      0.89161	     |   
+|
+|  decision_tree_submission.csv	 |   0.83607	         |      0.83995 	   |   
+|
+|  boosting_submission.csv		   |   0.90408	         |     0.91004  	   |
+|
+|  bagging_submission.csv	       |   0.89387	         |     0.89848	     |
+____________________________________________________________________________
+
+
+These Kaggle scores are reported separately from the local validation metrics because they represent performance on the competition's external evaluation data rather than the held-out validation partition used during model development.
+
+# Data Inspection
+
+## Dataset Dimensions
+
+```{r}
+show_table(
+  data_dimensions,
+  caption = "Dataset dimensions"
+)
+
+```
+
+
+The training dataset contains **20,758 observations and 18** variables. The Kaggle test dataset contains **13,840 observations and 17** variables. The training data contain the additional **NObeyesdad** response variable.
+
+The difference is expected because the Kaggle test data do not provide the target labels.
+
+## Predictor Variables
+
+The numerical predictors are:
+
+    •   Age
+
+    •   Height
+
+    •   Weight
+
+    •   FCVC
+
+    •   NCP
+
+    •   CH2O
+
+    •   FAF
+
+    •   TUE
+
+The categorical predictors are:
+
+    •   Gender
+
+    •   family_history_with_overweight
+
+    •   FAVC
+
+    •   CAEC
+
+    •   SMOKE
+
+    •   SCC
+
+    •   CALC
+
+    •   MTRANS
+
+The predictors therefore represent several types of information, including physical measurements, demographic characteristics, dietary behavior, physical activity, and lifestyle.
+
+The identifier variable id was excluded from model predictors because it identifies observations rather than representing a substantive explanatory feature.
+
+## Missing Values
+
+```{r}
+show_table(
+  missing_values,
+  caption = "Missing-value summary"
+)
+
+```
+
+
+
+The inspection results show no missing values in the training data. Consequently, the completed models did not require missing-value imputation.
+
+## Duplicate Observations
+
+```{r}
+show_table(
+  duplicate_summary,
+  caption = "Duplicate-observation summary"
+)
+
+```
+
+
+
+The training data contain **zero duplicate rows**.
+
+This provides a clean starting point for the subsequent exploratory and predictive analysis.
+
+## Example Training Observations
+
+```{r}
+show_table(
+  first_five_training_observations,
+  caption = "First five training observations"
+)
+
+```
+
+
+
+The observations demonstrate the mixture of numerical and categorical information available to the classification models.
+
+# Target Variable and Exploratory Analysis
+
+## Target Variable
+
+The response variable is **NObeyesdad**, with seven categories:
+
+    •   Insufficient_Weight
+
+    •   Normal_Weight
+
+    •   Obesity_Type_I
+
+    •   Obesity_Type_II
+
+    •   Obesity_Type_III
+
+    •   Overweight_Level_I
+
+    •   Overweight_Level_II
+
+```{r}
+show_table(
+  target_distribution,
+  caption = "Target-class distribution",
+  digits = 4
+)
+
+```
+
+
+The target classes are not perfectly balanced. **Obesity_Type_III** is the largest class, with **4,046 observations**, representing approximately **19.5%** of the training data. **Overweight_Level_I** is the smallest, with **2,427 observations**, or approximately **11.7%**.
+
+The differences are not extreme, but they are sufficient to justify reporting Macro F1 in addition to Accuracy.
+
+## Distribution of the Target Variable
+
+
+```{r}
+show_figure(
+  target_plot,
+  "The target-distribution figure is not currently available."
+)
+
+```
+
+
+The target distribution demonstrates that all seven classes have substantial representation in the training data. However, the classes are not equally frequent.
+
+This makes class-sensitive evaluation important. Accuracy summarizes the proportion of all observations classified correctly, whereas Macro F1 gives equal importance to each target class.
+
+## Weight by Target Class
+
+```{r}
+
+show_figure(
+  weight_plot,
+  "The weight-by-target figure is not currently available."
+)
+
+```
+
+
+
+Weight displays substantial differences across the target categories and is subsequently identified as an important predictive variable by the tree-based models.
+
+The repeated importance of Weight is consistent with the structure of the target classification, but the machine-learning results should be interpreted as predictive associations rather than causal effects.
+
+## Age and Height by Target Class
+
+
+```{r}
+show_figure(
+  age_plot,
+  "The age-by-target figure is not currently available."
+)
+
+show_figure(
+  height_plot,
+  "The height-by-target figure is not currently available."
+)
+
+
+```
+
+
+
+Age and Height also show differences across target categories. Both variables contribute predictive information in the fitted tree-based models, although their importance is substantially lower than Weight in the reported importance analyses.
+
+## Numerical Correlations
+
+```{r}
+show_figure(
+  correlation_plot,
+  "The numeric-correlation figure is not currently available."
+)
+
+```
+
+
+
+The correlation matrix provides a descriptive view of relationships among the numerical predictors. Correlation does not establish causation and does not capture all nonlinear relationships or interactions.
+
+This distinction is relevant because tree-based models can represent nonlinear relationships and interactions without requiring those relationships to be explicitly specified in advance.
+
+The exploratory analysis therefore establishes the data structure and potential predictive relationships before the report turns to the required conceptual and applied tree-model analyses.
+
+
+# Conceptual Question #1: Recursive Binary Splitting
+
+**ISLR Python, Chapter 8, Conceptual Question #1** asks for an original example of a two-dimensional feature-space partition produced by recursive binary splitting. The example must contain at least six regions and a corresponding decision tree, with the regions and cutpoints labeled.
+
+The purpose of this exercise is to demonstrate how a classification or regression tree recursively partitions predictor space using sequential binary splits.
+
+```{r}
+partition_plot <- file.path(
+  FIG_DIR,
+  "assignment_6_question_1_partition.png"
+)
+
+
+tree_conceptual_plot <- file.path(
+  FIG_DIR,
+  "assignment_6_question_1_tree.png"
+)
+
+combined_partition_plot <- file.path(
+  FIG_DIR,
+  "assignment_6_question_1_combined.png"
+)
+
+show_figure(
+  combined_partition_plot,
+  "The recursive binary-splitting figure is not currently available."
+)
+
+```
+
+
+
+The conceptual example contains six or more regions, denoted 
+ 
+  *R1, R2, ..., and uses sequential cutpoints t1, t2, ...*. 
+  
+Each split divides an existing region into two smaller regions.
+
+For example, an initial split at:
+  
+  *X1 = t1*,
+  
+divides the two-dimensional predictor space into two portions. A subsequent split can divide one of those portions using 
+
+ *X2 = t2*,
+
+and additional splits continue the process until the required regions are created.
+
+The corresponding decision tree represents exactly the same partition in hierarchical form. Each internal node contains a splitting rule, each branch represents one side of the rule, and each terminal node corresponds to one region of predictor space.
+
+This exercise illustrates the fundamental mechanism underlying the *Decision Tree* used later in this report. **Recursive binary splitting** provides an interpretable sequence of rules, but a single tree can be sensitive to the particular training sample. This limitation motivates the ensemble methods examined in the remainder of the analysis.
+
+# Decision Tree Model
+
+The Decision Tree is the first predictive model and provides the baseline for the ensemble approaches.
+
+The model uses the available predictors after preprocessing and excludes the identifier variable id. The labeled observations were divided using a stratified 80/20 partition, producing **16,606 training observations and 4,152 validation observations**.
+
+```{r}
+
+show_table(
+  decision_tree_configuration,
+  caption = "Decision Tree configuration"
+)
+
+```
+
+
+Stratification was used so that the relative representation of the seven target classes was approximately preserved between the training and validation portions.
+
+## Decision Tree Performance
+
+```{r}
+show_table(
+  decision_tree_metrics,
+  caption = "Decision Tree validation performance"
+)
+
+```
+
+
+The completed Decision Tree achieved:
+
+    •   **Accuracy**: 0.8396
+
+    •   **Macro F1**: 0.8252
+
+    •   **Weighted F1**: 0.8400
+
+The single tree therefore provides a useful baseline for evaluating whether combining multiple trees improves classification performance.
+
+The Macro F1 value is lower than Accuracy, indicating that performance is not identical across all seven target classes.
+
+```{r}
+show_table(
+  decision_tree_classification_report,
+  caption = "Decision Tree classification report"
+)
+
+show_table(
+  decision_tree_confusion_matrix,
+  caption = "Decision Tree confusion matrix"
+)
+
+```
+
+
+The class-level results show that some categories are substantially easier to classify than others. In particular, the neighboring overweight categories are more difficult than several of the obesity categories.
+
+This distinction is important because a model can achieve relatively high overall Accuracy while still producing substantially more errors for particular classes.
+
+## Decision Tree Interpretation
+
+The Decision Tree demonstrates the direct application of recursive binary splitting to the obesity classification problem.
+
+Its primary advantage is interpretability. Predictions can be followed through a sequence of splitting rules until a terminal node is reached.
+
+Its principal limitation is that an individual tree can have relatively high variance: changes in the training observations can result in different splits and therefore a different fitted tree.
+
+The validation Accuracy of **0.8396** provides the baseline against which Bagging, Random Forest, and Boosting can be evaluated.
+
+# Bagging
+
+**Bagging, which stands for bootstrap aggregation in Data Science**, addresses some of the instability of a single decision tree by fitting many trees to bootstrap samples of the training data and aggregating their predictions.
+
+Instead of relying on one tree, the final classification is based on the combined predictions of the ensemble. Averaging across many fitted trees can reduce variance.
+
+## Bagging Performance
+
+```{r}
+show_table(
+  bagging_metrics,
+  caption = "Bagging validation performance"
+)
+
+```
+
+
+The completed Bagging model achieved:
+
+    •   **Accuracy**: 0.8926
+
+    •   **Macro F1**: 0.8809
+
+    •   **Weighted F1**: 0.8923
+
+Relative to the Decision Tree, Bagging increased:
+
+    •   Accuracy by approximately **0.0530**
+
+    •   Macro F1 by approximately **0.0557**
+
+    •   Weighted F1 by approximately **0.0523**
+
+Thus, the observed improvement is present across all three principal evaluation measures rather than being limited to Accuracy.
+
+```{r}
+show_table(
+  bagging_classification_report,
+  caption = "Bagging classification report"
+)
+
+show_table(
+  bagging_confusion_matrix,
+  caption = "Bagging confusion matrix"
+)
+
+```
+
+
+The class-level results show improved performance for several of the categories that were more difficult for the single tree, including the overweight categories.
+
+## Bagging Interpretation
+
+The Bagging results illustrate the practical effect of combining multiple bootstrap-trained trees.
+
+The improvement from **0.8396 to 0.8926 in Accuracy** indicates that the ensemble captures predictive patterns more consistently than the individual Decision Tree on the reported validation partition.
+
+The result is consistent with the theoretical motivation for Bagging: averaging multiple high-variance tree models can reduce the effect of the particular training observations used by any single tree.
+
+Bagging nevertheless retains an important limitation of the underlying tree approach: the individual trees can still be correlated because they are constructed from the same predictor set. Random Forest addresses this issue by introducing additional randomization in predictor selection.
+
+# Random Forest
+
+Random Forest extends Bagging by adding random feature selection during tree construction.
+
+For each tree, a bootstrap sample is used and, at each split, only a randomly selected subset of predictors is considered. This reduces correlation among the individual trees and can improve the predictive performance of the resulting ensemble.
+
+## Random Forest Performance
+
+```{r}
+show_table(
+  random_forest_metrics,
+  caption = "Random Forest validation performance"
+)
+
+```
+
+
+The completed Random Forest achieved:
+
+    •   **Accuracy**: 0.8964
+
+    •   **Macro F1**: 0.8850
+
+    •   **Weighted F1**: 0.8959
+
+Compared with Bagging, the Random Forest increased:
+
+    •   Accuracy from **0.8926 to 0.8964**
+
+    •   Macro F1 from **0.8809 to 0.8850**
+
+    •   Weighted F1 from **0.8923 to 0.8959**
+
+The observed differences are smaller than the improvement obtained by moving from a single tree to an ensemble.
+
+```{r}
+show_table(
+  random_forest_classification_report,
+  caption = "Random Forest classification report"
+)
+
+show_table(
+  random_forest_confusion_matrix,
+  caption = "Random Forest confusion matrix"
+)
+
+```
+
+
+
+The Random Forest class-level results show particularly strong classification of the obesity categories. The neighboring overweight categories remain comparatively difficult, although their F1 scores are substantially higher than those obtained by the single Decision Tree.
+
+## Random Forest Feature Importance
+
+```{r}
+show_table(
+  random_forest_feature_importance,
+  caption = "Random Forest feature importance",
+  digits = 6
+)
+
+```
+
+
+The ten highest-ranked Random Forest predictors were:
+
+
+|**Rank**	    | **Feature**	         | **Importance**	   |  
+|:---         |:---:                 |---:               |
+|
+|  1	        |   Weight	           |      0.335918     |  
+|
+|  2	        |   Age	               |      0.095886     |   
+|
+|  3	        |   Height	           |      0.091773     |   
+|
+|  4		      |   FCVC	             |      0.083404     |
+|
+|  5	        |   CH2O	             |      0.046287   	 |
+|
+|  6	        |   TUE	               |      0.044589   	 |  
+|
+|  7	        |   Gender_Female	     |      0.044420     |   
+|
+|  8	        |   FAF	               |      0.041682     |   
+|
+|  9		      |   Gender_Male	       |      0.034434  	 |
+|
+|  10	        |   NCP	               |      0.032283	   |
+__________________________________________________________
+
+
+
+Weight has the largest reported importance, followed by Age, Height, and FCVC.
+
+The remaining variables also contribute to the fitted Random Forest, although their importance values are considerably smaller than Weight.
+
+These values describe how the fitted model uses the predictors for classification. **They do not establish causal relationships**. For example, the high importance of Weight means that Weight provides substantial predictive information for the fitted model; it does not by itself demonstrate that changing Weight would cause a change in the assigned NObeyesdad category.
+
+## Interpretation of Bagging and Random Forest
+
+Both Bagging and Random Forest substantially improve upon the single Decision Tree.
+
+The comparison also illustrates the distinction between the two ensemble strategies. Bagging primarily reduces variance by averaging trees trained on bootstrap samples, whereas Random Forest additionally reduces correlation among trees by randomly limiting the predictors considered at each split.
+
+In this analysis, Random Forest produced somewhat higher validation metrics than Bagging. However, the difference was relatively small compared with the improvement achieved by either ensemble over the individual Decision Tree.
+
+This provides an empirical example of the central idea behind ensemble learning: combining multiple unstable learners can produce more consistent predictive performance than relying on a single fitted tree.
+
+
+# Boosting
+
+Boosting is the third required ensemble approach in the analysis. Unlike Bagging and Random Forest, which construct trees independently and aggregate their predictions, Boosting builds the ensemble sequentially. Later trees are used to improve classification of observations that were not adequately handled by the preceding trees.
+
+For this analysis, Boosting used the stratified 80/20 validation design, with **16,606 training observations and 4,152 validation observations**. The completed model used **103 boosting iterations**.
+
+## Boosting Performance
+
+```{r}
+show_table(
+  boosting_metrics,
+  caption = "Boosting validation performance"
+)
+
+```
+
+
+The completed Boosting model achieved:
+
+    •   Accuracy: 0.9068
+
+    •   Macro F1: 0.8965
+
+    •   Weighted F1: 0.9063
+
+These are the highest reported validation metrics among the completed conventional models.
+
+Compared with the single Decision Tree, Boosting increased Accuracy from **0.8396 to 0.9068** and Macro F1 from **0.8252 to 0.8965**.
+
+Compared with Random Forest, the increase was smaller: Accuracy increased from **0.8964 to 0.9068**, while Macro F1 increased from **0.8850 to 0.8965**.
+
+The results therefore show a large improvement from an individual tree to an ensemble and a smaller additional improvement from Random Forest to Boosting.
+
+```{r}
+show_table(
+  boosting_classification_report,
+  caption = "Boosting classification report"
+)
+
+```
+
+
+The class-level results demonstrate that performance varies by target category.
+
+The strongest result is for **Obesity_Type_III**, with an F1 score of approximately **0.9957**. The most difficult categories include **Overweight_Level_I** and **Overweight_Level_II**, with F1 scores of approximately **0.7923** and **0.8055**, respectively.
+
+
+```{r}
+show_table(
+  boosting_confusion_matrix,
+  caption = "Boosting confusion matrix"
+)
+
+```
+
+
+The confusion matrix shows that many remaining errors occur among neighboring weight-status categories. This provides a more detailed explanation of the difference between overall Accuracy and Macro F1.
+
+## Boosting Feature Importance
+
+The Boosting analysis used permutation importance at the original predictor level.
+
+The ten highest-ranked predictors were:
+
+|**Rank**	  | **Feature**	                    | **Mean Importance**	 |  **SD**         |
+|:---       |:---:                            |---:                  |---:             |
+|                                                                                      |
+|  1	      |   Weight	                      |      	  0.618786	   |    0.009736     |   |                                                                                      |
+|  2	      |   Gender	                      |      	  0.166956	   | 0.004277        |   |                                                                                      |
+|  3	      |   FCVC	                        |     0.131985	       | 0.002192  	     |   
+|                                                                                      |
+|  4	      |   Height	                      |    0.102216	         | 0.003018	       |  
+|                                                                                      |
+|  5	      |   CH2O	                        |    0.027649	         | 0.001615	       |
+|                                                                                      |  
+|  6	      |   Age	                          |      	   0.026927	   |   0.001123      |   |                                                                                      |
+|  7	      |   TUE	                          |      	0.013006	     | 0.001890        |
+|                                                                                      |
+|  8	      |   NCP	                          |      	0.011994	     |  0.001071       |
+|                                                                                      |
+|  9	      |   FAF	                          |      	0.008382       | 0.001213        |   
+|                                                                                      |
+|  10	      | family_history_with_overweight	|  	   0.006985	       | 0.000549        |  
+----------------------------------------------------------------------------------------
+
+
+Weight is again the most important predictor according to the fitted model.
+
+The Boosting results also illustrate why feature-importance values should not be compared mechanically across algorithms. Random Forest uses an impurity-based importance measure in the reported analysis, whereas Boosting uses permutation importance at the original predictor level. The measures therefore quantify different aspects of model behavior.
+
+## Interpretation of Boosting
+
+Boosting provides the strongest observed conventional-model validation results in this analysis.
+
+The improvement is present across Accuracy, Macro F1, and Weighted F1, indicating that the increase is not confined to the more frequent target classes.
+
+The class-level results also show that Boosting improves the difficult overweight categories relative to the single tree. Nevertheless, those categories remain substantially more difficult to classify than Obesity_Type_III.
+
+The results therefore illustrate both the predictive benefit and the limitations of Boosting: the ensemble captures complex relationships among the predictors, but some neighboring target categories remain difficult to distinguish.
+
+# L2-Regularized Multinomial Logistic Regression
+
+To address the comparison with simpler methods required by **Applied Question #12**, an L2-regularized multinomial Logistic Regression model was fitted as a non-tree baseline.
+
+The model used:
+
+    •   Standardized numerical predictors.
+
+    •   One-hot encoded categorical predictors.
+
+    •   L2 regularization.
+
+    •   The lbfgs optimization method.
+
+    •   Five-fold cross-validation for selecting the regularization parameter C.
+
+The candidate values of𝐶ranged from **0.001 through 100**, and the selected value was:
+
+            𝐶= 100
+
+The reported five-fold cross-validation accuracy at the selected value was **0.865109**.
+
+The held-out validation observations were not used to select C.
+
+## Logistic Regression Performance
+
+```{r}
+show_table(
+  logistic_regression_metrics,
+  caption = "L2-regularized multinomial Logistic Regression performance"
+)
+
+```
+
+
+The final Logistic Regression model achieved:
+
+    •   **Accuracy**: 0.870424
+
+    •   **Macro F1**: 0.856762
+
+    •   **Weighted F1**: 0.869487
+
+    •   **Log Loss**: 0.398660
+
+These results are higher than the single Decision Tree but lower than the completed Bagging, Random Forest, and Boosting models on the reported validation partition.
+
+
+```{r}
+show_table(
+  logistic_regression_classification_report,
+  caption = "Logistic Regression classification report"
+)
+
+```
+
+
+The class-level results again show a substantial difference between easier and more difficult categories.
+
+The Logistic Regression model performs particularly strongly for **Obesity_Type_III** and **Obesity_Type_II**, while **Overweight_Level_I** and **Overweight_Level_II** have lower F1 scores.
+
+```{r}
+show_table(
+  logistic_regression_confusion_matrix,
+  caption = "Logistic Regression confusion matrix"
+)
+
+```
+
+
+
+## Logistic Regression Interpretation
+
+The Logistic Regression results provide an important reference point for interpreting the tree-based models.
+
+The model can represent additive relationships between predictors and class probabilities, but it does not automatically capture the nonlinear interactions represented by the tree ensembles.
+
+The fact that the ensemble models produce higher observed validation metrics than Logistic Regression suggests that the nonlinear and interaction-based representations available to the tree methods provide additional predictive information for this dataset.
+
+This comparison should nevertheless be interpreted as an empirical result for the specified modeling pipeline rather than as evidence that tree methods will always outperform Logistic Regression.
+
+## Regularization and Model Selection
+
+The selected C = 100 corresponds to relatively weak L2 regularization among the candidate values considered.
+
+Cross-validation was used to select the parameter using the training portion, preserving the held-out validation observations for final evaluation.
+
+The optimizer configuration is also documented because the console output indicated that iteration limits were relevant during development. The final reported metrics should therefore be interpreted together with the configuration and convergence information recorded by the modeling script.
+
+# Applied Question #12: Comparative Evaluation
+
+**ISLR Python Applied Question #12** asks the analyst to:
+
+Apply boosting, bagging, random forests, and BART to a data set of your choice. Be sure to fit the models on a training set and to evaluate their performance on a test set. How accurate are the results compared to simple methods like linear or logistic regression? Which of these approaches yields the best performance?
+
+This analysis addresses the question using the **Multi-class Prediction of Obesity Risk** dataset.
+
+The required methods are represented by:
+
+    •   **Bagging**
+
+    •   **Random Forest**
+
+    •   **Boosting**
+
+    •   **BART**
+
+The analysis also includes:
+
+    •   A single Decision Tree as a tree-based baseline.
+
+    •   L2-regularized multinomial Logistic Regression as the requested simple-method comparison.
+
+The models were evaluated using held-out observations rather than the observations used to fit the corresponding models.
+
+The principal local validation results are:
+
+
+|**Model**	               | **Accuracy**	 | **Macro F1**	 |  **Weighted F1** |
+|:---                      |---:           |---:           |---:              |
+|
+|  Decision Tree	         |   0.8396	     |      0.8252	 |        0.8400    |
+|
+|  L2 Logistic Regression	 |   0.8704	     |      0.8568	 |         0.8695   |
+|
+|  Bagging	               |   0.8926	     |       0.8809	 |         0.8923   |
+|
+|  Random Forest	         |   0.8964	     |       0.8850	 |         0.8959   |
+|
+|  Boosting	               |   0.9068	     |       0.8965	 |         0.9063   |
+______________________________________________________________________________
+
+These results provide a direct answer to the accuracy portion of Applied Question #12.
+
+The single Decision Tree provides the lowest reported conventional-model Accuracy at **0.8396**. Logistic Regression increases the observed Accuracy to **0.8704**. Bagging, Random Forest, and Boosting produce progressively higher observed validation Accuracy values of **0.8926**, **0.8964**, and **0.9068**, respectively.
+
+The same general pattern is present for Macro F1 and Weighted F1.
+
+For this particular validation analysis, **Boosting produced the highest observed conventional-model validation metrics**. This statement describes the completed validation results and does not imply that the same ordering would necessarily occur on another dataset or another validation partition.
+
+## Kaggle External Evaluation
+
+The Kaggle competition provides an additional external evaluation of the submitted predictions.
+
+The recorded leaderboard results were:
+
+
+|**Submission**	                 | **Private Score**	 | **Public Score**	 |  
+|:---                            |---:                 |---:               |
+|
+|  Bart               	         |   0.73256	         |      0.73338	     |  
+|
+|  Random Forest	               |   0.89216	         |      0.89161	     |   
+|
+|  Decision Tree              	 |   0.83607	         |      0.83995 	   |   
+|
+|  Boosting               		   |   0.90408	         |     0.91004  	   |
+|
+|  Bagging              	       |   0.89387	         |     0.89848	     |
+____________________________________________________________________________
+
+
+
+The Kaggle scores should be kept separate from the local validation results because they were calculated on the competition's evaluation data.
+
+The Kaggle results nevertheless provide an additional check on whether the fitted models generated useful predictions outside the local validation partition. The submitted Boosting model received a public score of **0.91004** and a private score of **0.90408**. The submitted Decision Tree received **0.83995** publicly and **0.83607** privately.
+
+The BART submission is also documented, with a public score of **0.73338** and a private score of **0.73256**.
+
+These external scores are reported as observed competition results rather than as replacements for the local validation analysis.
+
+## Interpretation of Applied Question #12
+
+The results demonstrate the central comparison requested by Applied Question #12.
+
+First, ensemble tree methods substantially improve upon the single Decision Tree in the completed analysis. Second, the L2-regularized Logistic Regression baseline performs better than the single tree but below the three conventional ensemble approaches on the reported validation partition. Third, the different ensemble strategies produce somewhat different results, with Boosting producing the highest observed conventional-model validation metrics.
+
+BART adds a Bayesian tree-based approach and produces posterior predictive probabilities rather than only hard class predictions. Its computational requirements were substantially greater than those of the conventional models, so its results are considered separately in the subsequent BART section.
+
+The results therefore demonstrate that the choice of model affects both predictive performance and computational requirements. The comparison also shows why evaluation should consider multiple metrics rather than relying solely on Accuracy.
+
+# Model Performance Comparison
+
+The principal validation results can be summarized directly from the completed model artifacts.
+
+```{r}
+
+comparison_table <- data.frame(
+  Model = c(
+    "Decision Tree",
+    "L2 Logistic Regression",
+    "Bagging",
+    "Random Forest",
+    "Boosting"
+  ),
+  Accuracy = c(
+    0.8396,
+    0.870424,
+    0.8926,
+    0.8964,
+    0.9068
+  ),
+  Macro_F1 = c(
+    0.8252,
+    0.856762,
+    0.8809,
+    0.8850,
+    0.8965
+  ),
+  Weighted_F1 = c(
+    0.8400,
+    0.869487,
+    0.8923,
+    0.8959,
+    0.9063
+  )
+)
+
+knitr::kable(
+  comparison_table,
+  digits = 4,
+  caption = "Local validation performance comparison"
+)
+
+```
+
+
+The results show three broad patterns.
+
+First, the ensemble methods substantially improve upon the individual Decision Tree. The largest change occurs when moving from one tree to an ensemble of trees.
+
+Second, Logistic Regression provides a useful non-tree benchmark. Its Accuracy of 0.8704 exceeds that of the Decision Tree but remains below the three conventional ensemble methods.
+
+Third, the differences among Bagging, Random Forest, and Boosting are comparatively smaller than the difference between a single tree and the ensemble approaches.
+
+```{r}
+model_performance_plot <- file.path(
+  FIG_DIR,
+  "model_performance_comparison.png"
+)
+
+show_figure(
+  model_performance_plot,
+  "The model-performance comparison figure is not currently available."
+)
+
+```
+
+
+The comparison should be interpreted in conjunction with the class-level results. A high overall Accuracy does not guarantee equally strong performance for every target category.
+
+The reported Macro F1 values provide an additional check because they give equal weight to all seven classes. The progression from 0.8252 for the Decision Tree to 0.8965 for Boosting indicates that the improvement in the ensemble models is also reflected in class-balanced performance.
+
+Overall, the completed validation analysis provides empirical evidence that ensemble tree methods captured predictive structure that was not represented as effectively by the individual Decision Tree or the Logistic Regression baseline.
+
+
+
+# Confusion-Matrix Analysis
+
+The confusion matrices provide class-level detail that is not captured by Accuracy alone. Across the tree-based models, the most difficult classifications generally involve the neighboring weight-status categories, particularly **Overweight_Level_I**, **Overweight_Level_II**, and **Normal_Weight**.
+
+For the Boosting model, the classification results illustrate this pattern clearly. **Obesity_Type_III** was classified with an F1 score of approximately **0.996**, whereas **Overweight_Level_I** and **Overweight_Level_II** had F1 scores of approximately **0.792** and **0.806**, respectively.
+
+
+```{r}
+show_table(
+  boosting_confusion_matrix,
+  caption = "Boosting confusion matrix"
+)
+
+```
+
+
+
+The Boosting confusion matrix records **806 correct classifications out of 809 Obesity_Type_III observations**, illustrating the very strong separation of this class. In contrast, misclassifications involving the two overweight categories occur more frequently.
+
+These results demonstrate why the analysis reports **Macro F1** in addition to Accuracy. Accuracy summarizes the total proportion of correct predictions, whereas Macro F1 gives equal weight to each of the seven classes.
+
+The confusion matrices therefore provide an important diagnostic for understanding where the models succeed and where their predictions remain less reliable.
+
+# Comparison of Feature Importance
+
+Feature importance provides an additional way to interpret the fitted tree-based models. Although the exact importance values differ by algorithm and methodology, Weight is consistently identified as an important predictor.
+
+The leading predictors reported by the tree-based models include:
+
+| **Model**       |	**Prominent predictors**                   |
+|:---             |:---:                                       |
+|                                                              |
+| Decision Tree	  |   Weight, Gender, Height, Age, CH2O        |
+|                                                              |
+| Bagging	        |  Weight, Height, Gender, Age               |
+|                                                              |
+| Random Forest	  | Weight, Age, Height, FCVC, CH2O            |
+|                                                              |
+| Boosting	      | Weight, Gender, FCVC, Height, CH2O         |
+|--------------------------------------------------------------|
+
+
+The Random Forest impurity-based results provide the following leading features:
+
+
+```{r}
+show_table(
+  random_forest_feature_importance,
+  caption = "Random Forest feature importance",
+  digits = 6
+)
+
+```
+
+
+
+Weight has the largest reported Random Forest importance, followed by Age and Height. The Boosting permutation-importance analysis also identifies Weight as the most important original predictor.
+
+
+```{r}
+feature_importance_plot <- file.path(
+  FIG_DIR,
+  "model_feature_importance_comparison.png"
+)
+
+show_figure(
+  feature_importance_plot,
+  "The feature-importance comparison figure is not currently available."
+)
+
+
+```
+
+
+The differences among the remaining predictors are expected because the models use different algorithms and, in some cases, different definitions of feature importance. Random Forest impurity importance and Boosting permutation importance should therefore not be interpreted as directly interchangeable quantities.
+
+Most importantly, feature importance represents predictive association within the fitted model, not causation. The repeated importance of Weight does not establish that Weight alone causes a particular obesity-status classification.
+
+# Kaggle Submission Results
+
+The four required conventional tree models were used to generate Kaggle submissions for the Multi-class Prediction of Obesity Risk competition. The BART analysis also generated a separate submission.
+
+Each submission contains predictions for the 13,840 observations in the Kaggle test data using the required id and NObeyesdad fields.
+
+The generated submission files were:
+
+    •   output/submissions/decision_tree_submission.csv
+
+    •   output/submissions/bagging_submission.csv
+
+    •   output/submissions/random_forest_submission.csv
+
+    •   output/submissions/boosting_submission.csv
+
+    •   output/bart/submission_bart.csv
+
+The Kaggle leaderboard results supplied for this analysis are:
+
+
+|**Submission**	                 | **Private Score**	 | **Public Score**	 |  
+|:---:                           |:---:                |:---:              |
+|
+|  submission_bart.csv	         |   0.73256	         |      0.73338	     |  
+|
+|  random_forest_submission.csv	 |   0.89216	         |      0.89161	     |   
+|
+|  decision_tree_submission.csv	 |   0.83607	         |      0.83995 	   |   
+|
+|  boosting_submission.csv		   |   0.90408	         |     0.91004  	   |
+|
+|  bagging_submission.csv	       |   0.89387	         |     0.89848	     |
+____________________________________________________________________________
+
+These leaderboard scores are external Kaggle evaluation results and should be distinguished from the local validation metrics reported elsewhere in this report. The two evaluations use different evaluation data and therefore should not be treated as identical measures.
+
+The submission evidence is included below.
+
+```{r}
+
+Evidence_of_Kaggle_Submissions <- file.path(
+  FIG_DIR,
+  "Evidence_of_Kaggle_Submissions.png"
+)
+
+show_figure(
+  Evidence_of_Kaggle_Submissions,
+  "The evidence of Kaggle submissions is not currently available."
+)
+
+```
+
+
+
+The Kaggle results provide an additional assessment of how the fitted models performed on the competition's unseen evaluation data. The submission evidence also documents completion of the required competition component of Assignment 6.
+
+# Applied Question #12: Boosting, Bagging, Random Forests, and BART
+
+**Applied Question #12 from ISLR Python asks**: apply boosting, bagging, random forests, and BART to a dataset of choice, fit the models on a training set, evaluate their performance on a test set, compare the results with simple methods such as linear or logistic regression, and determine which approaches provide the strongest observed performance.
+
+This analysis addresses the question using the **NObeyesdad obesity-classification dataset**. The response contains seven obesity-status categories, and the analysis evaluates Bagging, Random Forest, Boosting, and BART alongside a multinomial Logistic Regression baseline.
+
+The conventional models were evaluated using a held-out validation partition. The L2-regularized Logistic Regression model provides the requested simple-method comparison.
+
+## BART Model
+
+Bayesian Additive Regression Trees (BART) were included as the Bayesian component of Applied Question #12.
+
+The BART implementation uses a **one-vs-rest strategy**, fitting a separate binary BART model for each of the seven target classes. The resulting posterior probabilities are normalized across classes to obtain multiclass predictions.
+
+This approach differs from the conventional tree ensembles because BART represents uncertainty through posterior sampling from an ensemble of Bayesian regression trees.
+
+The BART implementation was intentionally configured with a relatively small sampling configuration to make the analysis computationally practical. The run used **100 tuning draws, 100 posterior draws, one chain, and one core**.
+
+The resulting BART metrics are read directly from the saved analysis artifact:
+
+```{r}
+
+if (
+  bart_available &&
+  !is.null(bart_metrics)
+) {
+
+  show_table(
+    bart_metrics,
+    caption = "BART validation performance",
+    digits = 4
+  )
+
+} else {
+
+  cat(
+    "BART results are not currently available for inclusion in this report."
+  )
+
+}
+
+
+```
+
+
+The BART results should therefore be interpreted as an additional Bayesian perspective rather than as a replacement for the conventional ensemble analysis.
+
+## BART Classification Results
+
+The class-level BART results are available in the saved classification report.
+
+```{r}
+
+if (
+  bart_available &&
+  !is.null(bart_classification_report)
+) {
+
+  show_table(
+    bart_classification_report,
+    caption = "BART classification report",
+    digits = 4
+  )
+
+} else {
+
+  cat(
+    "The BART classification report is not currently available."
+  )
+
+}
+
+```
+
+
+
+The classification report provides precision, recall, and F1 information for each of the seven target classes. This allows BART to be evaluated using the same general class-level framework applied to the conventional models.
+
+## BART Confusion Matrix
+
+```{r}
+
+if (
+  bart_available &&
+  !is.null(bart_confusion_matrix)
+) {
+
+  show_table(
+    bart_confusion_matrix,
+    caption = "BART confusion matrix"
+  )
+
+} else {
+
+  cat(
+    "The BART confusion matrix is not currently available."
+  )
+
+}
+
+
+```
+
+
+
+The confusion matrix shows how BART distributes correct and incorrect predictions across the seven target classes. As with the conventional models, confusion among neighboring weight-status categories provides information about where classification remains difficult.
+
+The confusion matrix is particularly useful because two models can have similar overall Accuracy while making different types of class-specific errors.
+
+## BART Posterior Predictive Probabilities
+
+BART also produced posterior predictive probabilities for the evaluation observations.
+
+
+```{r}
+if (
+  bart_available &&
+  !is.null(bart_test_probabilities)
+) {
+
+  show_table(
+    bart_test_probabilities,
+    caption = "BART posterior predictive probabilities",
+    digits = 4
+  )
+
+} else {
+
+  cat(
+    "The BART posterior predictive probability artifact is not currently available."
+  )
+
+}
+
+
+```
+
+
+These probabilities provide more information than a hard class prediction alone. They indicate the model's estimated probability of membership in each class and therefore provide information about predictive uncertainty.
+
+For example, a prediction with one class receiving a very high posterior probability represents a more concentrated prediction than one in which several classes receive similar probabilities.
+
+## BART Feature Metadata
+
+```{r}
+
+if (
+  bart_available &&
+  !is.null(bart_feature_metadata)
+) {
+
+  show_table(
+    bart_feature_metadata,
+    caption = "BART feature metadata"
+  )
+
+} else {
+
+  cat(
+    "The BART feature-metadata artifact is not currently available."
+  )
+
+}
+
+
+```
+
+
+The feature metadata document how the original predictors were represented in the BART pipeline. This is important for reproducibility because categorical predictors may require encoding before being supplied to the Bayesian models.
+
+The metadata also helps distinguish the original predictor variables from any encoded variables used internally by the modeling pipeline.
+
+## BART Comparison
+
+The BART analysis generated a comparison artifact containing its performance alongside the conventional approaches.
+
+```{r}
+
+if (
+  bart_available &&
+  !is.null(bart_comparison)
+) {
+
+  show_table(
+    bart_comparison,
+    caption = "BART comparison with conventional models",
+    digits = 4
+  )
+
+} else {
+
+  cat(
+    "The BART comparison artifact is not currently available."
+  )
+
+}
+
+
+```
+
+
+The comparison should be interpreted descriptively. Differences among models can reflect not only their underlying statistical approaches but also preprocessing, hyperparameter settings, random initialization, and validation design.
+
+The BART model also required substantially more computational resources than the conventional tree models. Consequently, computational cost is an important practical consideration alongside predictive performance.
+
+## BART Submission
+
+The completed BART pipeline generated the following Kaggle submission:
+
+    •   output/bart/submission_bart.csv
+
+The file contains predictions for all 13,840 Kaggle test observations using the required id and NObeyesdad fields.
+
+The reported Kaggle results for this submission were:
+
+    •   Private Score: 0.73256
+
+    •   Public Score: 0.73338
+
+These scores are reported as external competition results and are kept separate from the local validation metrics used to evaluate the fitted models.
+
+## Interpretation of Applied Question #12
+
+Applied Question #12 requires comparison of ensemble tree methods with a simpler statistical-learning approach. This analysis provides that comparison through:
+
+    •   Bagging
+
+    •   Random Forest
+
+    •   Boosting
+
+    •   BART
+
+    •   L2-regularized multinomial Logistic Regression
+
+The local validation results show that the ensemble tree methods substantially improved upon the single Decision Tree and Logistic Regression baseline in the completed conventional-model runs. The corresponding Kaggle results provide an independent competition-based evaluation.
+
+The analysis therefore demonstrates the main methodological point of Applied Question #12: different ensemble strategies can produce substantially different predictive performance even when they use the same underlying predictors.
+
+BART extends this comparison by providing a Bayesian tree-based approach with posterior predictive probabilities. Its greater computational requirements and different modeling framework should be considered when interpreting its results.
+
+Overall, the Applied Question #12 analysis demonstrates the use of multiple tree-based methods on a multiclass classification problem and evaluates their performance against a regularized Logistic Regression baseline using held-out observations and external Kaggle evaluation.
+
+
+
+
+# Overall Model Comparison
+
+## Applied Question #12: Comparison of Tree-Based Methods
+
+**Applied Question #12 asks** the analyst to apply boosting, bagging, random forests, and BART to a dataset of choice, fit the models on training data, evaluate them on a test set, and compare their performance with simpler methods such as linear or logistic regression (James et al., 2023). The obesity classification analysis addresses this question using the seven-class NObeyesdad response and compares the required tree-based approaches with an L2-regularized multinomial Logistic Regression baseline.
+
+The analysis also includes a single Decision Tree because it provides the fundamental tree-based reference point from which the ensemble methods are developed.
+
+The completed conventional-model validation results were:
+
+```{r}
+
+if (!is.null(model_results) && nrow(model_results) > 0) {
+
+  comparison_results <- model_results
+
+  if ("Model" %in% names(comparison_results)) {
+
+    comparison_results$Model[
+      comparison_results$Model == "Logistic Regression"
+    ] <- "L2 Logistic Regression"
+
+  }
+
+  preferred_columns <- c(
+    "Model",
+    "Accuracy",
+    "Macro_F1",
+    "Weighted_F1"
+  )
+
+  available_columns <- intersect(
+    preferred_columns,
+    names(comparison_results)
+  )
+
+  comparison_results <- comparison_results[
+    ,
+    available_columns,
+    drop = FALSE
+  ]
+
+  show_table(
+    comparison_results,
+    caption = "Consolidated validation performance",
+    digits = 4
+  )
+
+} else {
+
+  cat(
+    "The consolidated model-comparison artifact is not currently available."
+  )
+
+}
+
+```
+
+
+The reported validation results show the progression from a single tree to ensemble methods. The Decision Tree achieved an Accuracy of 0.8396, while the L2-regularized Logistic Regression baseline achieved 0.8704. Bagging increased Accuracy to 0.8926, Random Forest to 0.8964, and Boosting to 0.9068. The corresponding Macro F1 values were 0.8252, 0.8568, 0.8809, 0.8850, and 0.8965, respectively.
+
+These results show that the ensemble methods provided higher observed validation performance than both the single Decision Tree and the Logistic Regression baseline in the completed analysis. The improvement is also evident in Weighted F1, which increased from 0.8400 for the Decision Tree to 0.9063 for Boosting.
+
+The results support the theoretical motivation for ensemble learning. Bagging reduces the instability of individual trees through bootstrap aggregation, Random Forest adds random predictor selection to reduce correlation among trees, and Boosting constructs trees sequentially to improve previous predictions (Breiman, 2001; James et al., 2023).
+
+
+## Class-Level Performance
+
+Overall Accuracy does not provide a complete description of the multiclass results because the seven target categories are not equally frequent.
+
+The class-level results show a consistent pattern. Obesity_Type_III was classified with an F1 score near 0.996 by the four conventional tree-based models. In contrast, Overweight_Level_I and Overweight_Level_II were more difficult to distinguish.
+
+For example, the F1 score for Overweight_Level_I increased from 0.6563 for the Decision Tree to 0.7923 for Boosting. Overweight_Level_II increased from 0.7264 to 0.8055 over the same comparison.
+
+This demonstrates why Macro F1 is useful in addition to Accuracy. Macro F1 gives each target category equal weight and therefore makes differences in class-level performance more visible.
+
+The confusion matrices further indicate that many errors occur between neighboring weight-status categories. These errors are relevant to the interpretation of the overall results because a model may have high overall Accuracy while still having comparatively lower performance for particular classes.
+
+#  Logistic Regression as the Simpler Baseline
+
+The L2-regularized multinomial Logistic Regression model provides the simpler statistical-learning comparison requested by Applied Question #12.
+
+    •   The model achieved:
+
+    •   Accuracy: 0.870424
+
+    •   Macro F1: 0.856762
+
+    •   Weighted F1: 0.869487
+
+    •   Log Loss: 0.398660
+
+The regularization parameter was selected through five-fold cross-validation, with C = 100 selected from the candidate values considered.
+
+The Logistic Regression results provide an important reference because the model does not rely on recursive tree splitting or tree ensembles. Its lower observed validation metrics than the three ensemble methods suggest that the nonlinear and interaction structure captured by the tree-based methods provides useful predictive information for this dataset.
+
+The Logistic Regression model also requires an implementation qualification: the optimizer's configured iteration limit and convergence output should be considered when interpreting the final baseline. This limitation does not eliminate its value as a comparison, but it should be documented as part of the model-fitting process.
+
+## BART and Applied Question #12
+
+BART is the Bayesian Additive Regression Trees component of Applied Question #12. It was included to satisfy the question's explicit requirement to apply boosting, bagging, random forests, and BART to a selected dataset and evaluate their performance against a simpler method.
+
+The BART implementation used a one-vs-rest strategy for the seven target classes. A separate binary BART model was fitted for each class, and the resulting posterior probabilities were combined to produce the final multiclass predictions.
+
+This approach differs from the conventional tree ensembles because BART represents uncertainty through posterior sampling from an ensemble of Bayesian regression trees (Chipman et al., 2010).
+
+```{r}
+if (
+  bart_available &&
+  !is.null(bart_metrics)
+) {
+
+  show_table(
+    bart_metrics,
+    caption = "BART validation performance for Applied Question #12",
+    digits = 4
+  )
+
+} else {
+
+  cat(
+    "BART results are not currently available for inclusion."
+  )
+
+}
+
+```
+
+
+
+The BART results should be interpreted alongside the other models while recognizing that its implementation used substantially greater computational resources. The BART configuration was intentionally kept relatively small for practical reasons, using 100 tuning draws, 100 posterior draws, one chain, and one core.
+
+The BART analysis therefore provides the Bayesian component required by Applied Question #12 while also illustrating an important practical consideration in statistical learning: computational cost can differ substantially among methods.
+
+## Kaggle Performance
+
+The local validation results and Kaggle leaderboard results represent different evaluation settings and should therefore be reported separately.
+
+The completed Kaggle submissions produced the following scores:
+
+
+|**Submission**	                 | **Private Score**	 | **Public Score**	 |  
+|:---                            |---:                 |---:               |
+|
+|  Bart               	         |   0.73256	         |      0.73338	     |  
+|
+|  Random Forest	               |   0.89216	         |      0.89161	     |   
+|
+|  Decision Tree              	 |   0.83607	         |      0.83995 	   |   
+|
+|  Boosting               		   |   0.90408	         |     0.91004  	   |
+|
+|  Bagging              	       |   0.89387	         |     0.89848	     |
+____________________________________________________________________________
+
+
+The Kaggle scores provide external evaluation on the competition's hidden test labels. They should not be treated as identical to the local validation metrics because the observations and evaluation procedure differ.
+
+The Kaggle results nevertheless provide additional evidence that the submitted prediction pipelines were successfully carried through from model fitting to prediction generation. In particular, all five submitted approaches produced predictions for the 13,840 Kaggle test observations.
+
+The Kaggle results also illustrate that model performance can differ between a local validation partition and an external evaluation dataset. This is one reason that a single validation statistic should not be interpreted as a universal measure of model performance.
+
+## Overall Interpretation
+
+Taken together, the results demonstrate the progression from a single interpretable tree to ensemble and Bayesian tree-based methods.
+
+The single Decision Tree provides a transparent baseline based on recursive binary splitting. Bagging, Random Forest, and Boosting combine multiple trees and consequently produce substantially higher observed validation metrics in this analysis. Logistic Regression provides a useful non-tree comparison, while BART supplies the Bayesian tree-based approach required by Applied Question #12.
+
+The repeated difficulty in distinguishing Overweight_Level_I and Overweight_Level_II is also important. The aggregate metrics do not fully describe this pattern, which is why the class-specific F1 scores and confusion matrices are included.
+
+Finally, the importance of Weight across the tree-based models is consistent with the predictive structure of the dataset. However, feature importance represents predictive association within a fitted model and does not establish causation.
+
+# Model Interpretation and Limitations
+
+## Interpretation of the Tree-Based Models
+
+The Decision Tree provides the most direct representation of recursive binary splitting. Each internal node applies a decision rule, and the resulting terminal region produces a class prediction.
+
+The ensemble methods extend this basic idea in different ways. Bagging averages predictions across bootstrap-trained trees. Random Forest adds random feature selection when constructing individual trees. Boosting builds trees sequentially so that later trees contribute to correcting earlier classification errors.
+
+These approaches therefore differ in how they address the instability and variance associated with an individual tree.
+
+## Feature Importance
+
+Weight was consistently identified as an important predictor by the tree-based models.
+
+Random Forest impurity-based importance ranked Weight first, followed by Age and Height. Boosting permutation importance also ranked Weight first, followed by Gender, FCVC, Height, and CH2O.
+
+The remaining feature rankings differed between methods. This is expected because feature-importance measures are model-specific. Impurity-based importance and permutation importance do not measure exactly the same quantity and therefore should not be expected to produce identical rankings.
+
+The results indicate that Weight provides substantial predictive information for distinguishing the target categories in this dataset. They do not demonstrate that Weight, Age, Height, or any other predictor causes a particular obesity classification.
+
+## Predictive Association Versus Causation
+
+The analysis is predictive rather than causal.
+
+A high feature-importance value means that information about a variable is useful to the fitted model. It does not mean that changing that variable would necessarily cause the predicted outcome to change.
+
+This distinction is particularly important for Weight, Age, Height, dietary behaviors, and physical-activity variables. The observed relationships may reflect interactions, indirect relationships, or characteristics incorporated into the definition of the target categories.
+
+The models should therefore be interpreted as tools for classification rather than as evidence of causal mechanisms.
+
+## Class-Level Limitations
+
+The seven target classes are related weight-status categories, and several are relatively close to one another conceptually. The confusion matrices show that the models have greater difficulty distinguishing some neighboring categories than others.
+
+In particular, Overweight_Level_I and Overweight_Level_II consistently produce lower F1 scores than Obesity_Type_III.
+
+This class-level variation demonstrates the importance of reporting Macro F1 and class-specific results alongside overall Accuracy.
+
+## Validation and Generalization
+
+The reported validation metrics are empirical estimates based on held-out observations from the available labeled data. They should not be interpreted as guarantees of performance on future observations.
+
+The results can also vary according to the particular validation partition, preprocessing choices, model configuration, and random seed.
+
+Similarly, Kaggle leaderboard results are based on the competition's hidden evaluation data and should be kept conceptually separate from local validation results.
+
+Neither local validation performance nor a Kaggle score should automatically be interpreted as a universal estimate of real-world performance.
+
+## BART and Computational Limitations
+
+BART provides a useful Bayesian perspective but required substantially more computation than the conventional models.
+
+The relatively small sampling configuration used in this assignment was selected to make the analysis computationally practical. Consequently, the BART analysis should not be interpreted as an exhaustive investigation of all possible posterior configurations.
+
+The BART results are therefore most appropriately viewed as an additional Bayesian ensemble analysis rather than as a replacement for the conventional tree-model comparison.
+
+## Reproducibility and Assumptions
+
+The analysis uses explicitly defined random states and separates computational model fitting from report generation. Python scripts generate durable CSV results and figures, while Report.Rmd reads those artifacts for presentation.
+
+This structure improves reproducibility and reduces the need to rerun computationally expensive models simply to regenerate the report.
+
+The main assumptions and considerations investigated in the analysis include:
+
+The target is treated as a multiclass classification problem.
+
+Training and validation observations are separated so that validation data are not used directly for fitting.
+
+Stratification is used for the principal validation partition to preserve approximate class proportions.
+
+Categorical predictors are appropriately encoded for algorithms requiring numerical inputs.
+
+Logistic Regression uses L2 regularization and cross-validation for selection of its regularization parameter.
+
+Feature importance is interpreted as predictive information rather than causal evidence.
+
+Model performance is evaluated using multiple metrics rather than Accuracy alone.
+
+# Conclusion
+
+This analysis developed and evaluated multiple approaches for predicting the seven NObeyesdad obesity-status categories. The modeling sequence included a single Decision Tree, Bagging, Random Forest, Boosting, L2-regularized multinomial Logistic Regression, and BART.
+
+The exploratory analysis found no missing values or duplicate training observations and showed that the seven target classes are not perfectly balanced. This supports the use of Accuracy together with Macro F1, Weighted F1, and class-level diagnostics.
+
+The single Decision Tree provided an interpretable baseline based on recursive binary splitting, including the implementation required for Conceptual Question #1. The ensemble methods produced substantially higher observed validation metrics than the individual tree. Bagging reduced dependence on any one bootstrap sample, Random Forest added randomized feature selection, and Boosting constructed the ensemble sequentially.
+
+The analysis also addressed Applied Question #12 by applying Bagging, Random Forest, Boosting, and BART to the obesity classification problem and comparing their results with Logistic Regression. The completed validation results showed higher observed Accuracy, Macro F1, and Weighted F1 for the three conventional ensemble methods than for the single Decision Tree and Logistic Regression baseline.
+
+The class-level results provide an important qualification to the aggregate performance measures. Obesity_Type_III was classified with very high F1 scores, whereas Overweight_Level_I and Overweight_Level_II remained comparatively difficult categories. This pattern was visible in the confusion matrices and demonstrates why multiclass model evaluation should not rely on Accuracy alone.
+
+The feature-importance analyses consistently identified Weight as an important predictor. Age, Height, FCVC, Gender, CH2O, and other behavioral variables also contributed to prediction, although their relative importance differed by algorithm and importance methodology. These findings describe predictive relationships within the fitted models and should not be interpreted as evidence of causation.
+
+The Kaggle submissions provided an additional external evaluation of the completed prediction pipelines. The submitted models produced Public/Private scores of 0.83995/0.83607 for the Decision Tree, 0.89848/0.89387 for Bagging, 0.89161/0.89216 for Random Forest, 0.91004/0.90408 for Boosting, and 0.73338/0.73256 for BART. These leaderboard results are reported separately from the local validation metrics because they represent a different evaluation setting.
+
+Overall, the assignment demonstrates how a simple, interpretable decision tree can be extended into ensemble and Bayesian tree-based methods. It also demonstrates the importance of comparing models using multiple complementary metrics, examining class-specific errors, documenting assumptions and limitations, and distinguishing predictive association from causal interpretation. The combination of local validation, Kaggle evaluation, feature-importance analysis, and reproducible computational artifacts provides a comprehensive assessment of the tree-based classification approaches used in this assignment.
+
+# End of Report
+
+# References
+
+James, G., Witten, D., Hastie, T., Tibshirani, R., & Taylor, J. (2023). An introduction to statistical learning: With applications in Python. Springer.
+
+Breiman, L. (2001). Random forests. Machine Learning, 45(1), 5–32. https://doi.org/10.1023/A:1010933404324
+
+Ganie, S. M., Dutta Pramanik, P. K., & Zhao, Z. (2025). Lifestyle data-based multiclass obesity prediction with interpretable ensemble models incorporating SHAP and LIME analysis. Scientific Reports, 15, 36916. https://doi.org/10.1038/s41598-025-20936-4
+
+Chipman, H. A., George, E. I., & McCulloch, R. E. (2010). BART: Bayesian additive regression trees. The Annals of Applied Statistics, 4(1), 266–298. https://doi.org/10.1214/09-AOAS285
